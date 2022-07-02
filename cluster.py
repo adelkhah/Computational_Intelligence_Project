@@ -8,7 +8,7 @@ from matplotlib import pyplot
 # number of data
 N = 410
 # number of nearest adjacent
-K = 5
+K = 3
 #number of cluster at the end
 C_target = 41
 data = []
@@ -16,7 +16,7 @@ data = []
 D_original = []
 R = []
 L = []
-G = 10
+G = 2
 D_current = []
 C_pre = N
 C_cur = N // G
@@ -37,14 +37,14 @@ def read_images():
 def array_distance(a, b):
     return np.linalg.norm(a-b)
 
-
+# compute the distance between every 2 data
 def initialize_D_original():
     for i in range(N):
         D_original.append([])
         for j in range(N):
             D_original[i].append(array_distance(data[i], data[j]))
 
-
+# store the k nearest adjacent data for each data
 def initialize_R():
     for i in range(N):
         R.append([])
@@ -55,7 +55,7 @@ def initialize_R():
             R[i].append(idx[j])
 
 
-
+# with k nearest data we calculate the distance between 2 data as follow
 def initialize_D_current():
     for i in range(N):
         D_current.append([])
@@ -67,7 +67,7 @@ def initialize_D_current():
             avg = sum / ((K+1)**2)
             D_current[i].append(avg)
 
-
+# every data is in 1 cluster each
 def initialize_L():
     for i in range(N):
         L.append(i)
@@ -110,7 +110,7 @@ def rand_index():
     RI = (TN + TP) / total
     print(RI)
 
-
+# we update the distance between clusters as follow
 def update_D_current():
     for i in range(C_cur):
         Pi = []
@@ -121,9 +121,10 @@ def update_D_current():
                 for q in R[y]:
                     if q not in Pi:
                         Pi.append(q)
-
-
         for j in range(C_cur):
+            if j == i:
+                continue
+
             Pj = []
             for y in range(N):
                 if L[y] == j:
@@ -132,8 +133,6 @@ def update_D_current():
                     for q in R[y]:
                         if q not in Pj:
                             Pj.append(q)
-
-
             sum = 0
             for a in Pi:
                 for b in Pj:
@@ -142,6 +141,8 @@ def update_D_current():
 
             D_current[i][j] = avg
 
+
+# returns a list of indexes of key element elected by the given heuristic
 def find_key_element(number_of_key):
     key = []
     first_key = -1
@@ -178,25 +179,29 @@ def find_key_element(number_of_key):
 
 def merge_cluster(key):
     for i in range(C_pre):
+        # if an element is not in key element
         if i not in key:
             mini = 1000000000000000000
             id = -1
+            # find the nearest key element
             for k in key:
 
                 if D_current[i][k] < mini:
                     mini = D_current[i][k]
                     id = k
 
+            # change the cluster number of the element into key cluster id
+            for x in range(N):
+                if L[x] == i:
+                    L[x] = id
 
-            L[i] = L[id]
 
-
-
+# we need to assure that for every i -> L[i] is one of these {0, 1, 2, 3, ... , C_cur}
+# so we reassign the cluster id
 def re_assign():
     mark = [0] * N
-    color = 0
     id = 0
-    for _ in range(C_cur):
+    for color in range(C_cur):
 
         for i in range(N):
             if mark[i] == 0:
@@ -204,11 +209,10 @@ def re_assign():
                 break
 
         for i in range(N):
-            if L[i] == id:
+            if mark[i] == 0 and L[i] == id:
                 L[i] = color
                 mark[i] = 1
 
-        color += 1
 
 
 read_images()
@@ -216,13 +220,11 @@ initialize_D_original()
 initialize_R()
 initialize_D_current()
 initialize_L()
-for row in R:
-    print(row)
+
 
 
 
 while C_cur > C_target:
-
     key = find_key_element(C_cur)
     merge_cluster(key)
     re_assign()
@@ -231,7 +233,8 @@ while C_cur > C_target:
     C_cur = C_cur // G
 
 
-key = find_key_element(C_target)
+C_cur = C_target
+key = find_key_element(C_cur)
 merge_cluster(key)
 re_assign()
 update_D_current()
