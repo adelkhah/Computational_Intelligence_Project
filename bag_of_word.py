@@ -2,7 +2,7 @@ import csv
 import math
 import numpy
 from gensim.models import KeyedVectors
-kv = KeyedVectors.load_word2vec_format("GoogleNews-vectors-negative300.bin", binary=True)
+kv = KeyedVectors.load_word2vec_format("./model/GoogleNews-vectors-negative300.bin", binary=True)
 
 dictionary = set()
 filename = "train.csv"
@@ -16,12 +16,17 @@ with open(filename, 'r', encoding='UTF-8') as csvfile:
         del row[:1]
 
         doc = row[0]
+        # print(doc)
         doc = doc.split()
         trim = []
         for word in doc:
-            if word.isalpha():
-                dictionary.add(word)
-                trim.append(word)
+            word_add = ''
+            for c in word:                      # Instead of using .isalpha() for whole word, using it for a charecter.
+                if not c.isalpha(): pass        # because we may have words like 'hi!', 'Chemistry!!', 'Physics2??,,'
+                word_add += c
+            # if word.isalpha():
+            dictionary.add(word_add)
+            trim.append(word_add)
 
         train_comment.append(trim)
 
@@ -31,6 +36,8 @@ filename = "test.csv"
 test_comment = []
 test_topic = []
 
+dictionary_test = set()
+
 with open(filename, 'r', encoding='UTF-8') as csvfile:
     csvreader = csv.reader(csvfile)
     next(csvreader)
@@ -38,18 +45,26 @@ with open(filename, 'r', encoding='UTF-8') as csvfile:
         del row[:1]
 
         doc = row[0]
+        # print(doc)
         doc = doc.split()
         trim = []
         for word in doc:
-            if word.isalpha():
-                dictionary.add(word)
-                trim.append(word)
-            elif word[:-1].isalpha():
-                dictionary.add(word[:-1])
-                trim.append(word[:-1])
-            elif word[1:].isalpha():
-                dictionary.add(word[1:])
-                trim.append(word[1:])
+            # if word.isalpha():
+            #     dictionary.add(word)
+            #     trim.append(word)
+            # elif word[:-1].isalpha():
+            #     dictionary.add(word[:-1])
+            #     trim.append(word[:-1])
+            # elif word[1:].isalpha():
+            #     dictionary.add(word[1:])
+            #     trim.append(word[1:])
+            word_add = ''
+            for c in word:                      # Instead of using .isalpha() for whole word, using it for a charecter.
+                if not c.isalpha(): pass        # because we may have words like 'hi!', 'Chemistry!!', 'Physics2??,,'
+                word_add += c
+            # if word.isalpha():
+            dictionary_test.add(word_add)
+            trim.append(word_add)
 
 
         test_comment.append(trim)
@@ -58,14 +73,23 @@ with open(filename, 'r', encoding='UTF-8') as csvfile:
 
 
 dictionary = list(dictionary)
+dictionary_test = list(dictionary_test)
 
+# dictionary is made up by all words in the train set
 
+# print(len(dictionary))
+
+# exit()
 print(len(test_topic))
 print(len(train_topic))
 print(len(dictionary))
+print(len(dictionary_test))
+print(len(set([*dictionary, *dictionary_test])))
+
+print('... Begin clustring ...')
 
 # number of data
-N = len(dictionary)
+N = len(set([*dictionary, *dictionary_test]))
 # number of nearest adjacent
 K = 2
 #number of cluster at the end
@@ -75,20 +99,29 @@ data = []
 D_original = []
 R = []
 L = []
-G = 2
+G = 50
 D_current = []
 C_pre = N
 C_cur = N // G
 
-def load_data():
-    for word in dictionary:
+def load_data(): 
+    for word in list(set([*dictionary, *dictionary_test])):
         data.append(word)
 
 
 def array_distance(a, b):
-    if a not in kv.keys():
-        return 0.1
-    if b not in kv.keys():
+    # if a not in kv.keys():
+    #     return 0.1
+    # if b not in kv.keys():
+    #     return 0.1
+    # if not a in kv.vocab:
+    #     return 0.1
+    # if not b in kv.vocab:
+    #     return 0.1
+    try:
+        kv[a]
+        kv[b]
+    except:
         return 0.1
     similar = kv.similarity(a, b)
     dist = 1 / similar
@@ -296,6 +329,8 @@ merge_cluster(key)
 re_assign()
 update_D_current()
 
+print("... End clustring ...")
+print('Beign BoW')
 
 
 idf = numpy.zeros(C_target)
@@ -357,7 +392,7 @@ for i, comment in enumerate(train_comment):
     bag_of_word_vector.append(bag_of_word)
 
 
-
+print(bag_of_word_vector)
 
 
 
