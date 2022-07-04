@@ -1,8 +1,9 @@
 import csv
 import math
 import numpy
-# from gensim.models import KeyedVectors
-# kv = KeyedVectors.load_word2vec_format("GoogleNews-vectors-negative300.bin", binary=True)
+
+from gensim.models import KeyedVectors
+kv = KeyedVectors.load_word2vec_format("GoogleNews-vectors-negative300.bin.gz", binary=True)
 
 dictionary = set()
 print(type(dictionary))
@@ -26,7 +27,12 @@ with open(filename, 'r', encoding='UTF-8') as csvfile:
 
         train_comment.append(trim)
 
-        train_topic.append(row[-1])
+        if row[-1] == 'Biology':
+            train_topic.append(0)
+        if row[-1] == 'Physics':
+            train_topic.append(1)
+        if row[-1] == 'Chemistry':
+            train_topic.append(2)
 
 filename = "test.csv"
 test_comment = []
@@ -52,34 +58,37 @@ with open(filename, 'r', encoding='UTF-8') as csvfile:
                 dictionary.add(word[1:])
                 trim.append(word[1:])
 
-
         test_comment.append(trim)
 
-        test_topic.append(row[-1])
-
+        if row[-1] == 'Biology':
+            test_topic.append(0)
+        if row[-1] == 'Physics':
+            test_topic.append(1)
+        if row[-1] == 'Chemistry':
+            test_topic.append(2)
 
 dictionary = list(dictionary)
-
 
 print(len(test_topic))
 print(len(train_topic))
 print(len(dictionary))
 
 # number of data
-N = len(dictionary)
+N = 5000
 # number of nearest adjacent
 K = 2
-#number of cluster at the end
-C_target = 5000
+# number of cluster at the end
+C_target = 1000
 data = []
 # distance between two data
-D_original = []
-R = []
+D_original = numpy.zeros((N, N))
+R = numpy.zeros((N, N))
 L = []
 G = 2
-D_current = []
+D_current = numpy.zeros((N, N))
 C_pre = N
 C_cur = N // G
+
 
 def load_data():
     for word in dictionary:
@@ -87,86 +96,50 @@ def load_data():
 
 
 def array_distance(a, b):
-    if a not in kv.keys():
-        return 0.1
-    if b not in kv.keys():
-        return 0.1
+    try:
+        kv.similarity(a, b)
+    except:
+        return 0.001
+
     similar = kv.similarity(a, b)
     dist = 1 / similar
     return dist
 
+
 # compute the distance between every 2 data
 def initialize_D_original():
     for i in range(N):
-        D_original.append([])
         for j in range(N):
-            D_original[i].append(array_distance(data[i], data[j]))
+            D_original[i][j] = array_distance(data[i], data[j])
+
 
 # store the k nearest adjacent data for each data
 def initialize_R():
     for i in range(N):
-        R.append([])
         A = numpy.array(D_original[i])
-        idx = numpy.argpartition(A, K+1)
+        idx = numpy.argpartition(A, K + 1)
 
-        for j in range(K+1):
-            R[i].append(idx[j])
+        for j in range(K + 1):
+            R[i][j] = idx[j]
 
 
 # with k nearest data we calculate the distance between 2 data as follow
 def initialize_D_current():
     for i in range(N):
-        D_current.append([])
         for j in range(N):
             sum = 0
             for x in R[i]:
                 for y in R[j]:
                     sum += D_original[x][y]
-            avg = sum / ((K+1)**2)
-            D_current[i].append(avg)
+            avg = sum / ((K + 1) ** 2)
+            D_current[i][j] = avg
+
 
 # every data is in 1 cluster each
 def initialize_L():
     for i in range(N):
         L.append(i)
 
-
-def C_2(n):
-    if n == 0 or n == 1:
-        return 0
-    return (n*(n-1))//2
-
-
-def rand_index():
-    cnt = [0] * C_target
-    for i in range(N):
-        if L[i] != -1:
-            cnt[L[i]] += 1
-    print(cnt)
-    total = C_2(N)
-    TPFP = 0
-    for i in range(C_target):
-        TPFP += C_2(cnt[i])
-
-    TP = 0
-    FN = 0
-    for i in range(0, 410, 10):
-        l = [0] * C_target
-        FNx = C_2(10)
-        for j in range(10):
-            if L[i+j] != -1:
-                l[L[i+j]] += 1
-
-        for j in range(C_target):
-            TP += C_2(l[j])
-            FNx -= C_2(l[j])
-
-        FN += FNx
-    FP = TPFP - TP
-    TN = total - (FN + TP + FP)
-    print(f'TP = {TP} , TN = {TN} , FP = {FP}, FN = {FN}')
-    RI = (TN + TP) / total
-    print(RI)
 
 # we update the distance between clusters as follow
 def update_D_current():
@@ -272,15 +245,11 @@ def re_assign():
                 mark[i] = 1
 
 
-
 load_data()
 initialize_D_original()
 initialize_R()
 initialize_D_current()
 initialize_L()
-
-
-
 
 while C_cur > C_target:
     key = find_key_element(C_cur)
@@ -298,14 +267,16 @@ re_assign()
 update_D_current()
 
 
-biology = numpy.zeros(C_target)
-chemestry = numpy.zeros(C_target)
-physic = numpy.zeros(C_target)
+for i in range(N, len(dictionary)):
+    L.append(C_target)
+    C_target += 1
+
+
+
 idf = numpy.zeros(C_target)
-cluster_similarity = numpy.zeros((C_target, 3))
 # 0 : biology _ 1 : physic _ 2 : chemestry
 
-for i,word in enumerate(dictionary):
+for i, word in enumerate(dictionary):
     cnt = 0
     if i % 1000 == 0:
         print(i)
@@ -322,102 +293,42 @@ for i,word in enumerate(dictionary):
     tmp = math.log(len(dictionary) / cnt)
     idf[cluster_id] += tmp
 
-
-
-for i in range(N):
-    cluster_id = L[i]
-    tmp1 = kv.similarity(data[i], 'Biology')
-    tmp2 = kv.similarity(data[i], 'Physics')
-    tmp3 = kv.similarity(data[i], 'Chemistry')
-    cluster_similarity[cluster_id][0] += tmp1
-    cluster_similarity[cluster_id][1] += tmp2
-    cluster_similarity[cluster_id][2] += tmp3
-
 for i in range(C_target):
     count_i = L.count(i)
     idf[i] /= count_i
-    cluster_similarity[i][0] /= count_i
-    cluster_similarity[i][1] /= count_i
-    cluster_similarity[i][2] /= count_i
 
+bag_of_word_vector = []
 
 for i, comment in enumerate(train_comment):
+    if i % 1000 == 0:
+        print(i)
+
+    bag_of_word = numpy.zeros(len(dictionary))
+    for word in comment:
+        id = dictionary.index(word)
+        cluster_id = L[id]
+        bag_of_word[cluster_id] += idf[cluster_id]
+
+    norm = numpy.linalg.norm(bag_of_word)
+    if norm != 0:
+        bag_of_word /= norm
+    bag_of_word_vector.append(bag_of_word)
+
+bag_of_word_test = []
+for i, comment in enumerate(test_comment):
     if i % 200 == 0:
         print(i)
-
-
-    bag_of_word = numpy.zeros(len(dictionary))
-    for word in comment:
-        id = dictionary.index(word)
-        cluster_id = L[id]
-        if train_topic[i] == 'Biology':
-            bag_of_word[id] += idf[cluster_id] * cluster_similarity[cluster_id][0]
-        elif train_topic[i] == 'Physics':
-            bag_of_word[id] += idf[cluster_id] * cluster_similarity[cluster_id][1]
-        elif train_topic[i] == 'Chemistry':
-            bag_of_word[id] += idf[cluster_id] * cluster_similarity[cluster_id][2]
-
-    if train_topic[i] == 'Biology':
-        biology += bag_of_word
-    elif train_topic[i] == 'Physics':
-        physic += bag_of_word
-    elif train_topic[i] == 'Chemistry':
-        chemestry += bag_of_word
-
-
-biology /= train_topic.count('Biology')
-physic /= train_topic.count('Physics')
-chemestry /= train_topic.count('Chemistry')
-
-
-
-
-
-
-
-
-
-
-
-
-def bag_of_word_distance(a, b):
-    return numpy.linalg.norm(a-b)
-
-
-accuracy = 0
-output_topic = []
-for i, comment in enumerate(test_comment):
-    if i % 100 == 0:
-        print(i)
-
     bag_of_word = numpy.zeros(len(dictionary))
 
     for word in comment:
         id = dictionary.index(word)
         cluster_id = L[id]
-        if test_topic[i] == 'Biology':
-            bag_of_word[id] += idf[cluster_id] * cluster_similarity[cluster_id][0]
-        elif test_topic[i] == 'Physics':
-            bag_of_word[id] += idf[cluster_id] * cluster_similarity[cluster_id][1]
-        elif test_topic[i] == 'Chemistry':
-            bag_of_word[id] += idf[cluster_id] * cluster_similarity[cluster_id][2]
+        bag_of_word[cluster_id] += idf[cluster_id]
 
-    distance_to_biology = bag_of_word_distance(biology, bag_of_word)
-    distance_to_physic = bag_of_word_distance(physic, bag_of_word)
-    distance_to_chemestry = bag_of_word_distance(chemestry, bag_of_word)
+    norm = numpy.linalg.norm(bag_of_word)
+    if norm != 0:
+        bag_of_word /= norm
+    bag_of_word_test.append(bag_of_word)
 
-    if distance_to_biology < distance_to_physic and distance_to_biology < distance_to_chemestry:
-        output_topic.append('Biology')
-    elif distance_to_physic < distance_to_biology and distance_to_physic < distance_to_chemestry:
-        output_topic.append('Physics')
-    else:
-        output_topic.append('Chemistry')
 
-for i, topic in enumerate(output_topic):
-    if topic == test_topic[i]:
-        accuracy += 1
 
-accuracy *= 100
-accuracy /= len(test_topic)
-
-print(accuracy)
