@@ -1,14 +1,75 @@
-import numpy as np
-import random
+import csv
+import math
+import numpy
+from gensim.models import KeyedVectors
+kv = KeyedVectors.load_word2vec_format("GoogleNews-vectors-negative300.bin", binary=True)
+
+dictionary = set()
+filename = "train.csv"
+train_comment = []
+train_topic = []
+
+with open(filename, 'r', encoding='UTF-8') as csvfile:
+    csvreader = csv.reader(csvfile)
+    next(csvreader)
+    for row in csvreader:
+        del row[:1]
+
+        doc = row[0]
+        doc = doc.split()
+        trim = []
+        for word in doc:
+            if word.isalpha():
+                dictionary.add(word)
+                trim.append(word)
+
+        train_comment.append(trim)
+
+        train_topic.append(row[-1])
+
+filename = "test.csv"
+test_comment = []
+test_topic = []
+
+with open(filename, 'r', encoding='UTF-8') as csvfile:
+    csvreader = csv.reader(csvfile)
+    next(csvreader)
+    for row in csvreader:
+        del row[:1]
+
+        doc = row[0]
+        doc = doc.split()
+        trim = []
+        for word in doc:
+            if word.isalpha():
+                dictionary.add(word)
+                trim.append(word)
+            elif word[:-1].isalpha():
+                dictionary.add(word[:-1])
+                trim.append(word[:-1])
+            elif word[1:].isalpha():
+                dictionary.add(word[1:])
+                trim.append(word[1:])
 
 
+        test_comment.append(trim)
+
+        test_topic.append(row[-1])
+
+
+dictionary = list(dictionary)
+
+
+print(len(test_topic))
+print(len(train_topic))
+print(len(dictionary))
 
 # number of data
-N = 410
+N = len(dictionary)
 # number of nearest adjacent
-K = 3
+K = 2
 #number of cluster at the end
-C_target = 41
+C_target = 5000
 data = []
 # distance between two data
 D_original = []
@@ -19,21 +80,19 @@ D_current = []
 C_pre = N
 C_cur = N // G
 
-def read_images():
-    for i in range(N):
-        label = i // 10
-        im = image.imread(f'ORL\\{i + 1}_{label + 1}.jpg')
-
-        if im.shape == (80, 70, 3):
-            R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
-            imgGray = 0.2989 * R + 0.5870 * G + 0.1140 * B
-            data.append(np.array(imgGray, dtype=np.int64))
-        else:
-            data.append(np.array(im, dtype=np.int64))
+def load_data():
+    for word in dictionary:
+        data.append(word)
 
 
 def array_distance(a, b):
-    return np.linalg.norm(a-b)
+    if a not in kv.keys():
+        return 0.1
+    if b not in kv.keys():
+        return 0.1
+    similar = kv.similarity(a, b)
+    dist = 1 / similar
+    return dist
 
 # compute the distance between every 2 data
 def initialize_D_original():
@@ -46,8 +105,8 @@ def initialize_D_original():
 def initialize_R():
     for i in range(N):
         R.append([])
-        A = np.array(D_original[i])
-        idx = np.argpartition(A, K+1)
+        A = numpy.array(D_original[i])
+        idx = numpy.argpartition(A, K+1)
 
         for j in range(K+1):
             R[i].append(idx[j])
@@ -213,7 +272,7 @@ def re_assign():
 
 
 
-read_images()
+load_data()
 initialize_D_original()
 initialize_R()
 initialize_D_current()
@@ -237,4 +296,72 @@ merge_cluster(key)
 re_assign()
 update_D_current()
 
-rand_index()
+
+
+idf = numpy.zeros(C_target)
+cluster_similarity = numpy.zeros((C_target, 3))
+# 0 : biology _ 1 : physic _ 2 : chemestry
+
+for i,word in enumerate(dictionary):
+    cnt = 0
+
+    for comment in train_comment:
+        if word in comment:
+            cnt += 1
+
+    for comment in test_comment:
+        if word in comment:
+            cnt += 1
+
+    cluster_id = L[i]
+    tmp = math.log(len(dictionary) / cnt)
+    idf[cluster_id] += tmp
+
+
+
+for i in range(N):
+    cluster_id = L[i]
+    tmp1 = kv.similarity(data[i], 'Biology')
+    tmp2 = kv.similarity(data[i], 'Physics')
+    tmp3 = kv.similarity(data[i], 'Chemistry')
+    cluster_similarity[cluster_id][0] += tmp1
+    cluster_similarity[cluster_id][1] += tmp2
+    cluster_similarity[cluster_id][2] += tmp3
+
+for i in range(C_target):
+    count_i = L.count(i)
+    idf[i] /= count_i
+    cluster_similarity[i][0] /= count_i
+    cluster_similarity[i][1] /= count_i
+    cluster_similarity[i][2] /= count_i
+
+
+bag_of_word_vector = []
+for i, comment in enumerate(train_comment):
+    if i % 200 == 0:
+        print(i)
+
+
+    bag_of_word = numpy.zeros(len(dictionary))
+    for word in comment:
+        id = dictionary.index(word)
+        cluster_id = L[id]
+        if train_topic[i] == 'Biology':
+            bag_of_word[id] += idf[cluster_id] * cluster_similarity[cluster_id][0]
+        elif train_topic[i] == 'Physics':
+            bag_of_word[id] += idf[cluster_id] * cluster_similarity[cluster_id][1]
+        elif train_topic[i] == 'Chemistry':
+            bag_of_word[id] += idf[cluster_id] * cluster_similarity[cluster_id][2]
+
+
+    bag_of_word_vector.append(bag_of_word)
+
+
+
+
+
+
+
+
+
+
